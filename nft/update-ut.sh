@@ -113,26 +113,38 @@ if ! [ $x -le $retry_times ]; then
   exit 103
 fi
 
+retry_on_fail() {
+  $1
+  if [ $? != '0' ]; then
+    sleep 1
+    $1
+    if [ $? != '0' ]; then
+      sleep 2
+      $1
+    fi
+  fi
+}
+
 # nft
-nft add chain inet fw4 ut_dstnat
-nft flush chain inet fw4 ut_dstnat
+retry_on_fail "nft add chain inet fw4 ut_dstnat"
+retry_on_fail "nft flush chain inet fw4 ut_dstnat"
 if ! nft list chain inet fw4 dstnat | grep -q 'jump ut_dstnat' > /dev/null; then
-  nft add rule inet fw4 dstnat jump ut_dstnat
+  retry_on_fail "nft add rule inet fw4 dstnat jump ut_dstnat"
 fi
-nft add rule inet fw4 ut_dstnat iifname $interface $protocol dport $private_port counter dnat ip to $host:$port
+retry_on_fail "nft add rule inet fw4 ut_dstnat iifname $interface $protocol dport $private_port counter dnat ip to $host:$port"
 n_rule1="add rule inet fw4 ut_dstnat iifname $interface $protocol dport $private_port counter dnat ip to $host:$port"
 
 n_rule2=""
 n_rule3=""
 n_rule4=""
 if [ $forward_ipv6 -eq 1 ]; then
-  nft add chain inet fw4 ut_forward_wan
-  nft flush chain inet fw4 ut_forward_wan
+  retry_on_fail "nft add chain inet fw4 ut_forward_wan"
+  retry_on_fail "nft flush chain inet fw4 ut_forward_wan"
   if ! nft list chain inet fw4 forward_wan | grep -q 'jump ut_forward_wan' > /dev/null; then
-    nft insert rule inet fw4 forward_wan jump ut_forward_wan
+    retry_on_fail "nft insert rule inet fw4 forward_wan jump ut_forward_wan"
   fi
-  nft add rule inet fw4 ut_forward_wan iifname $interface meta nfproto ipv6 tcp dport $port counter accept
-  nft add rule inet fw4 ut_forward_wan iifname $interface meta nfproto ipv6 udp dport $port counter accept
+  retry_on_fail "nft add rule inet fw4 ut_forward_wan iifname $interface meta nfproto ipv6 tcp dport $port counter accept"
+  retry_on_fail "nft add rule inet fw4 ut_forward_wan iifname $interface meta nfproto ipv6 udp dport $port counter accept"
   n_rule2="insert rule inet fw4 forward_wan jump ut_forward_wan"
   n_rule3="add rule inet fw4 ut_forward_wan iifname $interface meta nfproto ipv6 tcp dport $port counter accept"
   n_rule4="add rule inet fw4 ut_forward_wan iifname $interface meta nfproto ipv6 udp dport $port counter accept"
@@ -142,7 +154,7 @@ n_rule5=""
 if [ $dnat_accept -eq 1 ]; then
   n_rule5="insert rule inet fw4 forward_wan ct status dnat counter accept"
   if ! nft list chain inet fw4 forward_wan | grep 'ct status dnat' | grep -q 'accept' > /dev/null; then
-    nft insert rule inet fw4 forward_wan ct status dnat counter accept
+    retry_on_fail "nft insert rule inet fw4 forward_wan ct status dnat counter accept"
   fi
 fi
 
